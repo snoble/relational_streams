@@ -1,0 +1,1 @@
+I'm just playing with an idea here. I'm trying to come up with a better way to write a flow based on multiple event emitters and subscribers with out explicitly writing separate definitions for each subscriber.
