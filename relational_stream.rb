@@ -14,6 +14,7 @@ class RelationalStream
 
   def each!(&block)
     @each_bang_methods << block
+    self
   end
 
   def emit(event)
@@ -51,8 +52,12 @@ class RelationalStream
   end
 
   def rolling_reduce(init, keys, &block)
-    rolling_reduce_stream = Rol
-    
+    rolling_reduce_stream = RollingReduceRStream.new
+    rolling_reduce_stream.initial = init
+    rolling_reduce_stream.keys = keys
+    rolling_reduce_stream.reduce_proc = block
+    rolling_reduce_stream.subscribe_to(self)
+    rolling_reduce_stream
   end
 
   def select_until(keys, &block)
@@ -174,7 +179,8 @@ class RollingReduceRStream < RelationalStream
   end
 
   def push(event, opts = {})
-    accumulator[:value] = reduce_proc.yield(accumulator, event)
+    accumulator = find_or_make_accumulator(event)
+    accumulator[:value] = reduce_proc.yield(accumulator[:value], event)
     emit RelationalEvent.new(:event => event, :accumulator => accumulator[:value])
     self
   end
