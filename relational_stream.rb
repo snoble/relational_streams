@@ -22,11 +22,15 @@ class RelationalStream
     @each_bang_methods.each {|m| m.yield(event)}
   end
 
+  def flatmap(&block)
+    flatmap_stream = FlatmapRStream.new
+    flatmap_stream.map_proc = block
+    flatmap_stream.subscribe_to(self)
+    flatmap_stream
+  end
+
   def map(&block)
-    map_stream = MapRStream.new
-    map_stream.map_proc = block
-    map_stream.subscribe_to(self)
-    map_stream
+    flatmap {|e| [block.yield(e)]}
   end
 
   def join(other_stream, keys)
@@ -38,10 +42,7 @@ class RelationalStream
   end
 
   def select(&block)
-    select_stream = SelectRStream.new
-    select_stream.filter_proc = block
-    select_stream.subscribe_to(self)
-    select_stream
+    flatmap {|e| block.yield(e) ? [e] : []}
   end
 
   def concat(other_stream)
@@ -61,11 +62,13 @@ class RelationalStream
   end
 
   def select_until(keys, &block)
-    select_until_stream = SelectUntilRStream.new
-    select_until_stream.keys = keys
-    select_until_stream.filter_proc = block
-    select_until_stream.subscribe_to(self)
-    select_until_stream
+    rolling_reduce(0, keys) do |acc, e|
+      next 2 if acc > 0
+      block.yield(e) ? 1 : 0
+    end
+    .select {|x| 
+      x[:accumulator] < 2}
+    .map {|x| x[:event]}
   end
 
   def select_first(keys)
@@ -89,11 +92,11 @@ class EchoRStream < RelationalStream
   end
 end
 
-class SelectRStream < RelationalStream
-  attr_accessor :filter_proc
+class FlatmapRStream < RelationalStream
+  attr_accessor :map_proc
 
   def push(event, opts = {})
-    emit(event) if @filter_proc.yield(event)
+    @map_proc.yield(event).each {|x| emit(x)}
     self
   end
 end
@@ -124,40 +127,6 @@ class JoinRStream < RelationalStream
     sides[other_side].each do |other_event|
       emit RelationalEvent.new(side => event, other_side => other_event)
     end
-    self
-  end
-end
-
-class MapRStream < RelationalStream
-  attr_accessor :map_proc
-
-  def push(event, opts = {})
-    emit map_proc.yield(event)
-    self
-  end
-end
-
-class SelectUntilRStream < RelationalStream
-  attr_accessor :value_store, :filter_proc, :keys
-
-  def initialize
-    super
-    @value_store = {}
-  end
-
-  def find_or_make_filter(event)
-    filter = keys.reduce(@value_store) do |hash, key|
-      hash[event[key]] = {} unless hash.member?(event[key])
-      hash[event[key]]
-    end
-    filter[:value] = false unless filter.member?(:value)
-    filter
-  end
-
-  def push(event, opts = {})
-    filter = find_or_make_filter(event)
-    emit(event) unless filter[:value]
-    filter[:value] ||= filter_proc.yield(event)
     self
   end
 end
