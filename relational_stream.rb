@@ -1,3 +1,4 @@
+require 'redis'
 require './relational_event'
 
 class RelationalStream
@@ -89,8 +90,8 @@ class RelationalStream
     flatmap {|e| [block.yield(e)]}
   end
 
-  def join(other_stream)
-    join_stream = JoinRStream.new(keys)
+  def join(other_stream, redis, redis_key)
+    join_stream = JoinRStream.new(keys, redis, redis_key)
     join_stream.subscribe_to(self, :side => :left)
     join_stream.subscribe_to(other_stream, :side => :right)
     join_stream
@@ -107,16 +108,16 @@ class RelationalStream
     concat_stream
   end
 
-  def rolling_reduce(init, &block)
-    rolling_reduce_stream = RollingReduceRStream.new(keys)
+  def rolling_reduce(init, redis, redis_key, &block)
+    rolling_reduce_stream = RollingReduceRStream.new(keys, redis, redis_key)
     rolling_reduce_stream.initial = init
     rolling_reduce_stream.reduce_proc = block
     rolling_reduce_stream.subscribe_to(self)
     rolling_reduce_stream
   end
 
-  def select_until(&block)
-    rolling_reduce(0) do |acc, e|
+  def select_until(redis, redis_key, &block)
+    rolling_reduce(0, redis, redis_key) do |acc, e|
       next 2 if acc > 0
       block.yield(e) ? 1 : 0
     end
@@ -125,8 +126,8 @@ class RelationalStream
     .map {|x| x[:event].dict}
   end
 
-  def select_first
-    select_until {|event| true}
+  def select_first(redis, redis_key)
+    select_until(redis, redis_key) {|event| true}
   end
 
 end
@@ -156,20 +157,18 @@ class FlatmapRStream < RelationalStream
 end
 
 class JoinRStream < RelationalStream
-  attr_accessor :value_store
+  attr_accessor :redis, :redis_key
 
-  def initialize(keys)
+  def initialize(keys, redis, redis_key)
     super(keys)
-    @value_store = {}
+    @redis = redis
+    @redis_key = redis_key
   end
 
   def find_or_make_sides(event)
-    sides = keys.reduce(@value_store) do |hash, key|
-      hash[event.key(key)] = {} unless hash.member?(event.key(key))
-      hash[event.key(key)]
-    end
-    sides[:left] = [] unless sides.member?(:left)
-    sides[:right] = [] unless sides.member?(:right)
+    sides = {}
+    sides[:left] = redis_key + Marshal.dump(event.keys) + 'left'
+    sides[:right] = redis_key + Marshal.dump(event.keys) + 'right'
     sides
   end
 
@@ -177,34 +176,37 @@ class JoinRStream < RelationalStream
     side = opts[:side]
     other_side = side == :left ? :right : :left
     sides = find_or_make_sides(event)
-    sides[side] << event
-    sides[other_side].each do |other_event|
+    redis.lpush(sides[side], Marshal.dump(event))
+    n = 0
+    while !(x = redis.lindex(sides[other_side], n)).nil?
+      # A while loop?! seriously?! what are we 12?
+      other_event = Marshal.load(x)
       emit RelationalEvent.new({side => event, other_side => other_event}, event.keys)
+      n += 1
     end
     self
   end
 end
 
 class RollingReduceRStream < RelationalStream
-  attr_accessor :value_store, :initial, :reduce_proc
-  def initialize(keys)
+  attr_accessor :initial, :reduce_proc, :redis, :redis_key
+  def initialize(keys, redis, redis_key)
     super(keys)
-    @value_store = {}
+    @redis = redis
+    @redis_key = redis_key
   end
 
   def find_or_make_accumulator(event)
-    accumulator = keys.reduce(@value_store) do |hash, key|
-      hash[event.key(key)] = {} unless hash.member?(event.key(key))
-      hash[event.key(key)]
-    end
-    accumulator[:value] = initial unless accumulator.member?(:value)
-    accumulator
+    redis_key + Marshal.dump(event.keys)
   end
 
   def push(event, opts = {})
     accumulator = find_or_make_accumulator(event)
-    accumulator[:value] = reduce_proc.yield(accumulator[:value], event)
-    emit RelationalEvent.new({:event => event, :accumulator => accumulator[:value]}, event.keys)
+    x = redis.get(accumulator)
+    prev_acc = x.nil? ? initial : Marshal.load(x)
+    next_acc = reduce_proc.yield(prev_acc, event)
+    redis.set(accumulator, Marshal.dump(next_acc))
+    emit RelationalEvent.new({:event => event, :accumulator => next_acc}, event.keys)
     self
   end
 end

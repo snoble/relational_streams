@@ -1,5 +1,8 @@
 require './relational_stream'
 require './relational_event'
+require 'redis'
+
+redis = Redis.new
 
 x = EchoRStream.new([:a])
 x.each! {|n| puts n[:a]}
@@ -9,9 +12,9 @@ y.each! {|n| puts n[:a] * 3}
 
 another_x = EchoRStream.new([:a])
 
-j = x.join(another_x)
+j = x.join(another_x, redis, 'join')
 
-jj = j.select_first
+jj = j.select_first(redis, 'select first')
 j.each! {|nn| puts "joined #{nn[:right][:b]}"}
 jj.each! {|nn| puts "first joined #{nn[:right][:b]}"}
 
