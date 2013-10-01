@@ -2,16 +2,14 @@ require 'redis'
 require './relational_event'
 
 class RelationalStream
-  attr_accessor :each_bang_methods, :subscribers, :subscriptions, :active, :keys, :keys_match_subscriptions, :each_methods
+  attr_accessor :each_bang_methods, :subscribers, :subscriptions, :active, :keys, :keys_match_subscriptions
 
   def initialize(keys)
     @keys = keys
     @each_bang_methods = []
-    @each_methods = []
     @subscribers = []
     @subscriptions = []
-    @active = false
-    @mutes = {}
+    @active = true
     @keys_match_subscriptions = true
   end
 
@@ -31,44 +29,16 @@ class RelationalStream
     end
   end
 
-  def make_mute(event)
-    mute = keys.reduce(@mutes) do |hash, key|
-      hash[event.key(key)] = {} unless hash.member?(event.key(key))
-      hash[event.key(key)]
-    end
-    mute
-  end
-
-  def active_for_event?(event)
-    mute = keys.reduce(@mutes) do |hash, key|
-      return true unless hash.member?(event.key(key))
-      hash[event.key(key)]
-    end
-    false
-  end
-
-  def mute_event_by_key(event)
-    pass_up {|s| s.mute_event_by_key(event)} if keys_match_subscriptions
-    make_mute(event)
-    self
-  end
-
   def each!(&block)
     activate!
     @each_bang_methods << block
     self
   end
 
-  def each(&block)
-    @each_methods << block
-    self
-  end
-
   def emit(event)
-    if @active and active_for_event?(event)
+    if @active
       @subscribers.each {|s| s.subscriber.push(event, s.options)}
       @each_bang_methods.each {|m| m.yield(event)}
-      @each_methods.each {|m| m.yield(event)}
     end
   end
 
@@ -121,7 +91,6 @@ class RelationalStream
       next 2 if acc > 0
       block.yield(e) ? 1 : 0
     end
-    .each {|x| make_mute(x) if x[:accumulator] >= 1}
     .select {|x| x[:accumulator] < 2}
     .map {|x| x[:event].dict}
   end
