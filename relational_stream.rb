@@ -116,6 +116,14 @@ class EchoRStream < RelationalStream
   end
 end
 
+class InputRStream < RelationalStream
+  def push(hash)
+    key_hash = Hash[*@keys.map {|k| [k, hash[k]]}.flatten]
+    emit(RelationalEvent.new(hash, key_hash))
+    self
+  end
+end
+
 class FlatmapRStream < RelationalStream
   attr_accessor :map_proc
 

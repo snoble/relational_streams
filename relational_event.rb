@@ -14,6 +14,14 @@ class RelationalEvent
     dict[x]  
   end
 
+  def to_hash
+    dict.to_hash
+  end
+
+  def merge(x)
+    RelationalEvent.new(x.merge(@dict), @keys)
+  end
+
   def marshal_dump
     [@dict, @keys]
   end

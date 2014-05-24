@@ -4,13 +4,13 @@ require 'redis'
 
 redis = Redis.new
 
-x = EchoRStream.new([:a])
+x = InputRStream.new([:a])
 x.each! {|n| puts n[:a]}
 
 y = x.select {|n| n[:a].even?}
 y.each! {|n| puts n[:a] * 3}
 
-another_x = EchoRStream.new([:a])
+another_x = InputRStream.new([:a])
 
 j = x.join(another_x, redis, 'join')
 
@@ -18,13 +18,13 @@ jj = j.select_first(redis, 'select first')
 j.each! {|nn| puts "joined #{nn[:right][:b]}"}
 jj.each! {|nn| puts "first joined #{nn[:right][:b]}"}
 
-x.push(RelationalEvent.new({:a => 2}, {:a => 2}))
- .push(RelationalEvent.new({:a => 3}, {:a => 3}))
+x.push({:a => 2})
+ .push({:a => 3})
 
 another_x
-  .push(RelationalEvent.new({:a => 3, :b => 3}, {:a => 3}))
-  .push(RelationalEvent.new({:a => 2, :b => 2}, {:a => 2}))
-  .push(RelationalEvent.new({:a => 3, :b => 33}, {:a => 3}))
-  .push(RelationalEvent.new({:a => 4, :b => 4}, {:a => 4}))
+  .push({:a => 3, :b => 3})
+  .push({:a => 2, :b => 2})
+  .push({:a => 3, :b => 33})
+  .push({:a => 4, :b => 4})
 
-x.push(RelationalEvent.new({:a => 4}, {:a => 4}))
+x.push({:a => 4})
