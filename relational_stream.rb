@@ -78,16 +78,16 @@ class RelationalStream
     concat_stream
   end
 
-  def rolling_reduce(init, redis, redis_key, &block)
-    rolling_reduce_stream = RollingReduceRStream.new(keys, redis, redis_key)
-    rolling_reduce_stream.initial = init
-    rolling_reduce_stream.reduce_proc = block
-    rolling_reduce_stream.subscribe_to(self)
-    rolling_reduce_stream
+  def scan(init, redis, redis_key, &block)
+    scan_stream = ScanRStream.new(keys, redis, redis_key)
+    scan_stream.initial = init
+    scan_stream.reduce_proc = block
+    scan_stream.subscribe_to(self)
+    scan_stream
   end
 
   def select_until(redis, redis_key, &block)
-    rolling_reduce(0, redis, redis_key) do |acc, e|
+    scan(0, redis, redis_key) do |acc, e|
       next 2 if acc > 0
       block.yield(e) ? 1 : 0
     end
@@ -157,7 +157,7 @@ class JoinRStream < RelationalStream
   end
 end
 
-class RollingReduceRStream < RelationalStream
+class ScanRStream < RelationalStream
   attr_accessor :initial, :reduce_proc, :redis, :redis_key
   def initialize(keys, redis, redis_key)
     super(keys)
