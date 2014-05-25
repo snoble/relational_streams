@@ -5,18 +5,18 @@ require 'redis'
 redis = Redis.new
 
 x = InputRStream.new([:a])
-x.each! {|n| puts n[:a]}
+x.each! {|n| puts "#{n[:a]} added to x"}
 
 y = x.select {|n| n[:a].even?}
-y.each! {|n| puts n[:a] * 3}
+y.each! {|n| puts "#{n[:a]} filtered to y"}
 
 another_x = InputRStream.new([:a])
 
 j = x.join(another_x, redis, 'join')
 
 jj = j.select_first(redis, 'select first')
-j.each! {|nn| puts "joined #{nn[:right][:b]}"}
-jj.each! {|nn| puts "first joined #{nn[:right][:b]}"}
+j.each! {|nn| puts "joined #{nn[:right][:b]} from x and another_x on key #{nn[:right][:a]}"}
+jj.each! {|nn| puts "first join of key #{nn[:right][:a]} from x and another_x"}
 
 x.push({:a => 2})
  .push({:a => 3})
