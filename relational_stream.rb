@@ -13,6 +13,15 @@ class RelationalStream
     @keys_match_subscriptions = true
   end
 
+  def to_o(extras = {})
+    {
+      :type => self.class.to_s,
+      :keys => @keys
+    }.merge(extras).merge({
+      :subscriptions => @subscriptions.map(&:to_o)
+    })
+  end
+
   def subscribe_to(other, opts = {})
     other.subscribers << RelationalStreamSubscription.new(self, opts)
     @subscriptions << other
@@ -117,10 +126,20 @@ class EchoRStream < RelationalStream
 end
 
 class InputRStream < RelationalStream
+  attr_accessor :source_name
+  def initialize(source_name, keys)
+    super(keys)
+    @source_name = source_name
+  end
+
   def push(hash)
     key_hash = Hash[*@keys.map {|k| [k, hash[k]]}.flatten]
     emit(RelationalEvent.new(hash, key_hash))
     self
+  end
+
+  def to_o
+    super({:source_name => @source_name})
   end
 end
 
@@ -130,6 +149,10 @@ class FlatmapRStream < RelationalStream
   def push(event, opts = {})
     @map_proc.yield(event).each {|x| emit(RelationalEvent.new(x, event.keys))}
     self
+  end
+
+  def to_o
+    super({:map_proc => {:id => @map_proc.to_s, :source_location => @map_proc.source_location}})
   end
 end
 
@@ -185,5 +208,9 @@ class ScanRStream < RelationalStream
     redis.set(accumulator, Marshal.dump(next_acc))
     emit RelationalEvent.new({:event => event, :accumulator => next_acc}, event.keys)
     self
+  end
+
+  def to_o
+    super({:reduce_proc => {:id => @map_proc.to_s, :source_location => @reduce_proc.source_location}})
   end
 end

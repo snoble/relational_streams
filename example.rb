@@ -4,13 +4,13 @@ require 'redis'
 
 redis = Redis.new
 
-x = InputRStream.new([:a])
+x = InputRStream.new("x", [:a])
 x.each! {|n| puts "#{n[:a]} added to x"}
 
 y = x.select {|n| n[:a].even?}
 y.each! {|n| puts "#{n[:a]} filtered to y"}
 
-another_x = InputRStream.new([:a])
+another_x = InputRStream.new("another_x", [:a])
 
 j = x.join(another_x, redis, 'join')
 

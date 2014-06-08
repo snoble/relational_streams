@@ -4,8 +4,8 @@ require 'redis'
 
 redis = Redis.new
 
-users = InputRStream.new([:user])
-charges = InputRStream.new([:user])
+users = InputRStream.new("users", [:user])
+charges = InputRStream.new("charges", [:user])
 
 charges_with_cumulative_amount = charges.scan(0, redis, 'rr10') {|amount, c| amount + c[:amount]}
   .map {|c| {:user => c[:event][:user], :amount => c[:event][:amount], :cumulative_amount => c[:accumulator]}}
@@ -43,17 +43,22 @@ threshold_update_first = first_milestone
   .select {|m| m[:amount] >= m[:threshold]}
   .select_first(redis, 'rr15')
 
-over_original_threshold_first.concat(threshold_update_first)
+create_manual_review = over_original_threshold_first.concat(threshold_update_first)
   .select_first(redis, 'rr16')
+
+create_manual_review
   .each! {|m| puts "Create manual review for #{m[:user]} with threshold #{m[:threshold]} at #{m[:amount]}"}
 
-users.push({:user => 1, :threshold => 120})
-users.push({:user => 2, :threshold => 130})
+require "json"
+puts JSON.generate(create_manual_review.to_o, :max_nesting => 100)
 
-7.times do |n|
-  charges.push({:user => 1, :amount => 50})
-end
+# users.push({:user => 1, :threshold => 120})
+# users.push({:user => 2, :threshold => 130})
 
-150.times do |n|
-  charges.push({:user => 2, :amount => 15})
-end
+# 7.times do |n|
+#   charges.push({:user => 1, :amount => 50})
+# end
+
+# 150.times do |n|
+#   charges.push({:user => 2, :amount => 15})
+# end
