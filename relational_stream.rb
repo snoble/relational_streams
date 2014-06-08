@@ -13,12 +13,12 @@ class RelationalStream
     @keys_match_subscriptions = true
   end
 
-  def to_o(extras = {})
+  def to_h(extras = {})
     {
       :type => self.class.to_s,
       :keys => @keys
     }.merge(extras).merge({
-      :subscriptions => @subscriptions.map(&:to_o)
+      :subscriptions => @subscriptions.map(&:to_h)
     })
   end
 
@@ -138,7 +138,7 @@ class InputRStream < RelationalStream
     self
   end
 
-  def to_o
+  def to_h
     super({:source_name => @source_name})
   end
 end
@@ -151,7 +151,7 @@ class FlatmapRStream < RelationalStream
     self
   end
 
-  def to_o
+  def to_h
     super({:map_proc => {:id => @map_proc.to_s, :source_location => @map_proc.source_location}})
   end
 end
@@ -210,7 +210,7 @@ class ScanRStream < RelationalStream
     self
   end
 
-  def to_o
+  def to_h
     super({:reduce_proc => {:id => @map_proc.to_s, :source_location => @reduce_proc.source_location}})
   end
 end

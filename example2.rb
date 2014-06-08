@@ -50,7 +50,7 @@ create_manual_review
   .each! {|m| puts "Create manual review for #{m[:user]} with threshold #{m[:threshold]} at #{m[:amount]}"}
 
 require "json"
-puts JSON.generate(create_manual_review.to_o, :max_nesting => 100)
+puts JSON.generate(create_manual_review.to_h, :max_nesting => 100)
 
 # users.push({:user => 1, :threshold => 120})
 # users.push({:user => 2, :threshold => 130})
